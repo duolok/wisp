@@ -5,5 +5,23 @@ import (
 )
 
 type ModelWrapper struct {
-    BedrockRuntimeClient *bedrockruntime.Client
+	BedrockRuntimeClient *bedrockruntime.Client
+}
+
+type LLM interface {
+	Invoke() (string, error)
+	Stream() (*bedrockruntime.InvokeModelWithResponseStreamOutput, error)
+}
+
+type LLMPrompt struct {
+	bedrock ModelWrapper
+	prompt  string
+}
+
+type Llama struct {
+    LLMPrompt
+}
+
+type EmbedEnglish struct {
+    LLMPrompt
 }
