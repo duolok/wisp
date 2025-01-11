@@ -11,8 +11,6 @@ import (
 
 type Llama3Request struct {
 	Prompt       string  `json:"prompt"`
-	MaxGenLength int     `json:"max_gen_len,omitempty`
-	Temperature  float64 `json:"max_gen_len,omitempty`
 }
 
 type Llama3Response struct {
@@ -30,8 +28,6 @@ func (r Llama3Response) GetContent() string {
 func (wrapper Llama) LlamaBody(prompt string) []byte {
 	body, err := json.Marshal(Llama3Request{
 		Prompt:       prompt,
-		MaxGenLength: 200,
-		Temperature:  0.5,
 	})
 
 	if err != nil {
@@ -43,13 +39,14 @@ func (wrapper Llama) LlamaBody(prompt string) []byte {
 
 func (wrapper Llama) Invoke() (string, error) {
 	output, err := wrapper.bedrock.BedrockRuntimeClient.InvokeModel(context.TODO(), &bedrockruntime.InvokeModelInput{
-		ModelId:     aws.String(Llama3modelId),
-		ContentType: aws.String("application/json"),
-		Body:        wrapper.LlamaBody(wrapper.prompt),
+		ModelId:            aws.String(Llama3modelId),
+		ContentType:        aws.String("application/json"),
+		Body:				wrapper.LlamaBody(wrapper.prompt),
 	})
 
     if err != nil {
         ProcessError(err, Llama3modelId)
+		return "", err
     }
 
     var response Llama3Response
