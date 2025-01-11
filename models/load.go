@@ -15,6 +15,14 @@ func (wrapper ModelWrapper) LoadModel(modelName string, prompt string) (string, 
 			return "", err
 		}
 		return response, nil
+	case anthropic:
+		anth := Anthropic{LLMPrompt{wrapper, prompt}}
+		response, err := anth.Invoke()
+		if err != nil {
+			return "", err
+		}
+		return response, nil
+
 	case embedEnglish:
 		// TODO
 	case titanG1Lite:
@@ -39,7 +47,7 @@ func (wrapper ModelWrapper) LoadStreamingModel(modelName string, prompt string) 
 		return response, nil
 
 	case embedEnglish:
-			// TODO	
+		// TODO
 	default:
 		return nil, errors.New("No such model: " + modelName)
 

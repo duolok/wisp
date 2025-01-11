@@ -1,5 +1,15 @@
 package models
 
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+
+	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+)
+
 type Claude3Request struct {
 	AnthropicVersion string    `json:"anthropic_version"`
 	MaxTokens        int       `json:"max_tokens"`
@@ -79,3 +89,108 @@ func (r Claude3Response) GetContent() string {
 	return r.ResponseContent[0].Text
 }
 
+func (wrapper Anthropic) AnthropicBody(prompt string) []byte {
+	payload := Claude3Request{
+		AnthropicVersion: "bedrock-2023-05-31",
+		MaxTokens:        200,
+		Messages: []Message{
+			{
+				Role: "user",
+				Content: []Content{
+					{
+						Type: "text",
+						Text: prompt,
+					},
+				},
+			},
+		},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return body
+}
+
+func (wrapper Anthropic) Invoke() (string, error) {
+	body := wrapper.AnthropicBody(wrapper.prompt)
+
+	output, err := wrapper.bedrock.BedrockRuntimeClient.InvokeModel(context.TODO(), &bedrockruntime.InvokeModelInput{
+		ModelId:     aws.String(claudeV3ModelID),
+		ContentType: aws.String("application/json"),
+		Body:        body,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var resp Claude3Response
+
+	err = json.Unmarshal(output.Body, &resp)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return resp.ResponseContent[0].Text, nil
+}
+
+func (wrapper Anthropic) Stream() (*bedrockruntime.InvokeModelWithResponseStreamOutput, error) {
+	body := wrapper.AnthropicBody(wrapper.prompt)
+
+	output, err := wrapper.bedrock.BedrockRuntimeClient.InvokeModelWithResponseStream(context.TODO(), &bedrockruntime.InvokeModelWithResponseStreamInput{
+		ModelId:     aws.String(claudeV3ModelID),
+		ContentType: aws.String("application/json"),
+		Body:        body,
+	})
+
+	if err != nil {
+		ProcessError(err, claudeV3ModelID)
+	}
+	return output, nil
+
+}
+
+const partialResponseTypeContentBlockDelta = "content_block_delta"
+const paritalResponseTypeMessageStart = "message_start"
+const partiaResponseTypeMessageDelta = "message_delta"
+const contentTypeText = "text"
+
+func ProcessAnthropicStreamingOutput(output *bedrockruntime.InvokeModelWithResponseStreamOutput, handler StreamingOutputHandler) error {
+	resp := Claude3Response{
+		Type:            "message",
+		Role:            "assistant",
+		Model:           claudeV3ModelID,
+		ResponseContent: []ResponseContent{{Type: contentTypeText}}}
+
+	for event := range output.GetContent().Events() {
+		switch v := event.(type) {
+		case *types.ResponseStreamMemberChunk:
+
+			var pr PartialResponse
+			err := json.NewDecoder(bytes.NewReader(v.Value.Bytes)).Decode(&pr)
+			if err != nil {
+				return err
+			}
+
+			if pr.Type == partialResponseTypeContentBlockDelta {
+				handler(context.Background(), []byte(pr.Delta.Text))
+			} else if pr.Type == partialResponseTypeMessageStart {
+				resp.ID = pr.Message.ID
+				resp.Usage.InputTokens = pr.Message.Usage.InputTokens
+			} else if pr.Type == partialResponseTypeMessageDelta {
+				resp.StopReason = pr.Delta.StopReason
+				resp.Usage.OutputTokens = pr.Message.Usage.OutputTokens
+			}
+
+		case *types.UnknownUnionMember:
+			return fmt.Errorf("unknown tag: %s", v.Tag)
+
+		default:
+			return fmt.Errorf("union is nil or unknown type")
+		}
+	}
+
+	return nil
+}
