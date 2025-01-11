@@ -1,6 +1,8 @@
 package models
 
-import "errors"
+import (
+	"errors"
+)
 
 func (wrapper ModelWrapper) LoadModel(modelName string, prompt string) (string, error) {
 	switch modelName {
