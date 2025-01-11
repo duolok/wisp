@@ -1,6 +1,8 @@
 package models
 
 import (
+	"context"
+
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 )
 
@@ -25,3 +27,6 @@ type Llama struct {
 type EmbedEnglish struct {
     LLMPrompt
 }
+
+type StreamingOutputHandler func(ctx context.Context, part []byte) error
+type ProcessingFunction func(output *bedrockruntime.InvokeModelWithResponseStreamOutput, handler StreamingOutputHandler) (any, error)
